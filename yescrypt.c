@@ -11,9 +11,13 @@
 #include "yescrypt-best.c"
 #include "sha256_Y.c"
 
+
+bool r16_key;
+
 int scanhash_yescrypt(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
-	uint32_t max_nonce, unsigned long *hashes_done)
+	uint32_t max_nonce, unsigned long *hashes_done, const bool r16)
 {
+	r16_key = r16;
 	uint32_t n = pdata[19] - 1;
 	const uint32_t first_nonce = pdata[19];
 	const uint32_t Htarg = ptarget[7];
@@ -30,8 +34,11 @@ int scanhash_yescrypt(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
 
 	do {
 		pdata[19] = ++n;
-		be32enc(&endiandata[19], n); 
-		yescrypt_hash_sp((unsigned char*) &endiandata, (unsigned char*) hash64);
+		be32enc(&endiandata[19], n);
+		if (r16)
+			yescryptr16_hash_sp((unsigned char*) &endiandata, (unsigned char*) hash64);
+		else
+			yescrypt_hash_sp((unsigned char*) &endiandata, (unsigned char*) hash64);
 		if ((hash64[7] < ptarget[7]) || ((hash64[7] == ptarget[7]) && (hash64[6] < ptarget[6])) &&
 				fulltest(hash64, ptarget)) {
 			*hashes_done = n - first_nonce + 1;
@@ -39,15 +46,15 @@ int scanhash_yescrypt(int thr_id, uint32_t *pdata, const uint32_t *ptarget,
                 bin2hex(hash_str, (unsigned char *)hash64, 32);
                 bin2hex(target_str, (unsigned char *)ptarget, 32);
                 bin2hex(data_str, (unsigned char *)endiandata, 80);
-                applog(LOG_DEBUG, "DEBUG: [%d thread] Found share!\ndata   %s\nhash   %s\ntarget %s", thr_id, 
+                applog(LOG_DEBUG, "DEBUG: [%d thread] Found share!\ndata   %s\nhash   %s\ntarget %s", thr_id,
                     data_str,
                     hash_str,
                     target_str);
             }
 			return true;
 		}
-	} while (n < max_nonce && !work_restart[thr_id].restart);	
-	
+	} while (n < max_nonce && !work_restart[thr_id].restart);
+
 	*hashes_done = n - first_nonce + 1;
 	pdata[19] = n;
 	return 0;
